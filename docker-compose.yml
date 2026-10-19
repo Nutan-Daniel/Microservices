@@ -1,0 +1,148 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  users:
+    build:
+      context: ./users
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=${USERS_DATABASE_URL:-sqlite+aiosqlite:///./users.db}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-me}
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./users:/app
+
+  catalog:
+    build:
+      context: ./catalog
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=${CATALOG_DATABASE_URL:-sqlite+aiosqlite:///./catalog.db}
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./catalog:/app
+
+  inventory:
+    build:
+      context: ./inventory
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    environment:
+      - DATABASE_URL=${INVENTORY_DATABASE_URL:-sqlite+aiosqlite:///./inventory.db}
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./inventory:/app
+
+  orders:
+    build:
+      context: ./orders
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8000"
+    environment:
+      - DATABASE_URL=${ORDERS_DATABASE_URL:-sqlite+aiosqlite:///./orders.db}
+      - REDIS_URL=redis://redis:6379/0
+      - PAYMENTS_URL=http://payments:8000
+      - INVENTORY_URL=http://inventory:8000
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./orders:/app
+
+  payments:
+    build:
+      context: ./payments
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8000"
+    environment:
+      - DATABASE_URL=${PAYMENTS_DATABASE_URL:-sqlite+aiosqlite:///./payments.db}
+      - REDIS_URL=redis://redis:6379/0
+      - PAYMENT_PROVIDER=sandbox
+      - PAYMENT_PROVIDER_URL=${PAYMENT_PROVIDER_URL:-http://sandbox-payment-provider:9000}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-dev-webhook-secret-change-me}
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./payments:/app
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - USERS_URL=http://users:8000
+      - CATALOG_URL=http://catalog:8000
+      - INVENTORY_URL=http://inventory:8000
+      - ORDERS_URL=http://orders:8000
+      - PAYMENTS_URL=http://payments:8000
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-me}
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=${RATE_LIMIT_REQUESTS_PER_MINUTE:-60}
+      - LOG_LEVEL=info
+    depends_on:
+      users:
+        condition: service_started
+      catalog:
+        condition: service_started
+      inventory:
+        condition: service_started
+      orders:
+        condition: service_started
+      payments:
+        condition: service_started
+    volumes:
+      - ./gateway:/app
+
+  storefront:
+    build:
+      context: ./storefront
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - GATEWAY_URL=http://gateway:8000
+      - LOG_LEVEL=info
+    depends_on:
+      gateway:
+        condition: service_started
+    volumes:
+      - ./storefront:/app
+
+volumes:
+  redis_data:
