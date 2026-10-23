@@ -8,6 +8,7 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -17,7 +18,6 @@ export default function Login() {
       if (!res.ok) throw new Error('Invalid credentials')
       const data = await res.json()
       setToken(data.access_token)
-      const router = useRouter()
       router.push('/')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Login failed')
