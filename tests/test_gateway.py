@@ -29,9 +29,11 @@ def test_health(client):
     assert resp.json()["status"] == "healthy"
 
 
-def test_products_requires_auth(client):
+def test_products_public_no_auth(client):
+    """Product browsing is public - no auth required."""
     resp = client.get("/products")
-    assert resp.status_code == 401
+    # Catalog may or may not be running during test
+    assert resp.status_code in (200, 502), resp.text
 
 
 def test_products_with_auth_downstream_unavailable(client, auth_headers):
